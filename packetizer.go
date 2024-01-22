@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 package rtp
 
 import (
@@ -6,7 +9,7 @@ import (
 
 // Payloader payloads a byte array for use as rtp.Packet payloads
 type Payloader interface {
-	Payload(mtu int, payload []byte) [][]byte
+	Payload(mtu uint16, payload []byte) [][]byte
 }
 
 // Packetizer packetizes a payload
@@ -17,13 +20,16 @@ type Packetizer interface {
 }
 
 type packetizer struct {
-	MTU              int
-	PayloadType      uint8
-	SSRC             uint32
-	Payloader        Payloader
-	Sequencer        Sequencer
-	Timestamp        uint32
-	ClockRate        uint32
+	MTU         uint16
+	PayloadType uint8
+	SSRC        uint32
+	Payloader   Payloader
+	Sequencer   Sequencer
+	Timestamp   uint32
+
+	// Deprecated: will be removed in a future version.
+	ClockRate uint32
+
 	extensionNumbers struct { // put extension numbers in here. If they're 0, the extension is disabled (0 is not a legal extension number)
 		AbsSendTime int // http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
 	}
@@ -31,7 +37,7 @@ type packetizer struct {
 }
 
 // NewPacketizer returns a new instance of a Packetizer for a specific payloader
-func NewPacketizer(mtu int, pt uint8, ssrc uint32, payloader Payloader, sequencer Sequencer, clockRate uint32) Packetizer {
+func NewPacketizer(mtu uint16, pt uint8, ssrc uint32, payloader Payloader, sequencer Sequencer, clockRate uint32) Packetizer {
 	return &packetizer{
 		MTU:         mtu,
 		PayloadType: pt,
@@ -69,6 +75,7 @@ func (p *packetizer) Packetize(payload []byte, samples uint32) []*Packet {
 				SequenceNumber: p.Sequencer.NextSequenceNumber(),
 				Timestamp:      p.Timestamp, // Figure out how to do timestamps
 				SSRC:           p.SSRC,
+				CSRC:           []uint32{},
 			},
 			Payload: pp,
 		}

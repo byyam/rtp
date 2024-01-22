@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 package codecs
 
 import (
@@ -167,6 +170,22 @@ func TestVP9Packet_Unmarshal(t *testing.T) {
 				Payload: []byte{},
 			},
 		},
+		"ScalabilityMissingWidth": {
+			b:   []byte("200"),
+			err: errShortPacket,
+		},
+		"ScalabilityMissingNG": {
+			b:   []byte("b00200000000"),
+			err: errShortPacket,
+		},
+		"ScalabilityMissingTemporalLayerIDs": {
+			b:   []byte("20B0"),
+			err: errShortPacket,
+		},
+		"ScalabilityMissingReferenceIndices": {
+			b:   []byte("20B007"),
+			err: errShortPacket,
+		},
 	}
 	for name, c := range cases {
 		c := c
@@ -205,7 +224,7 @@ func TestVP9Payloader_Payload(t *testing.T) {
 
 	cases := map[string]struct {
 		b   [][]byte
-		mtu int
+		mtu uint16
 		res [][]byte
 	}{
 		"NilPayload": {
@@ -216,11 +235,6 @@ func TestVP9Payloader_Payload(t *testing.T) {
 		"SmallMTU": {
 			b:   [][]byte{{0x00, 0x00}},
 			mtu: 1,
-			res: [][]byte{},
-		},
-		"NegativeMTU": {
-			b:   [][]byte{{0x00, 0x00}},
-			mtu: -1,
 			res: [][]byte{},
 		},
 		"OnePacket": {
@@ -304,18 +318,18 @@ func TestVP9Payloader_Payload(t *testing.T) {
 	})
 }
 
-func TestVP9PartitionHeadChecker_IsPartitionHead(t *testing.T) {
-	checker := &VP9PartitionHeadChecker{}
+func TestVP9IsPartitionHead(t *testing.T) {
+	vp9 := &VP9Packet{}
 	t.Run("SmallPacket", func(t *testing.T) {
-		if checker.IsPartitionHead([]byte{}) {
+		if vp9.IsPartitionHead([]byte{}) {
 			t.Fatal("Small packet should not be the head of a new partition")
 		}
 	})
 	t.Run("NormalPacket", func(t *testing.T) {
-		if !checker.IsPartitionHead([]byte{0x18, 0x00, 0x00}) {
+		if !vp9.IsPartitionHead([]byte{0x18, 0x00, 0x00}) {
 			t.Error("VP9 RTP packet with B flag should be head of a new partition")
 		}
-		if checker.IsPartitionHead([]byte{0x10, 0x00, 0x00}) {
+		if vp9.IsPartitionHead([]byte{0x10, 0x00, 0x00}) {
 			t.Error("VP9 RTP packet without B flag should not be head of a new partition")
 		}
 	})

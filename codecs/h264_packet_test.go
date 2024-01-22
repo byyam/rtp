@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 package codecs
 
 import (
@@ -115,8 +118,16 @@ func TestH264Packet_Unmarshal(t *testing.T) {
 		t.Fatal("Unmarshal did not fail on nil payload")
 	}
 
-	if _, err := pkt.Unmarshal([]byte{0x00, 0x00}); err == nil {
-		t.Fatal("Unmarshal accepted a packet that is too small for a payload and header")
+	if _, err := pkt.Unmarshal([]byte{}); err == nil {
+		t.Fatal("Unmarshal did not fail on []byte{}")
+	}
+
+	if _, err := pkt.Unmarshal([]byte{0xFC}); err == nil {
+		t.Fatal("Unmarshal accepted a FU-A packet that is too small for a payload and header")
+	}
+
+	if _, err := pkt.Unmarshal([]byte{0x0A}); err != nil {
+		t.Fatal("Unmarshaling end of sequence(NALU Type : 10) should succeed")
 	}
 
 	if _, err := pkt.Unmarshal([]byte{0xFF, 0x00, 0x00}); err == nil {
@@ -180,45 +191,68 @@ func TestH264Packet_Unmarshal(t *testing.T) {
 	}
 }
 
-func TestH264PartitionHeadChecker_IsPartitionHead(t *testing.T) {
-	h264PartitionHeadChecker := H264PartitionHeadChecker{}
+func TestH264IsPartitionHead(t *testing.T) {
+	h264 := H264Packet{}
 
-	if h264PartitionHeadChecker.IsPartitionHead(nil) {
+	if h264.IsPartitionHead(nil) {
 		t.Fatal("nil must not be a partition head")
 	}
 
 	emptyNalu := []byte{}
-	if h264PartitionHeadChecker.IsPartitionHead(emptyNalu) {
+	if h264.IsPartitionHead(emptyNalu) {
 		t.Fatal("empty nalu must not be a partition head")
 	}
 
 	singleNalu := []byte{1, 0}
-	if h264PartitionHeadChecker.IsPartitionHead(singleNalu) == false {
+	if h264.IsPartitionHead(singleNalu) == false {
 		t.Fatal("single nalu must be a partition head")
 	}
 
 	stapaNalu := []byte{stapaNALUType, 0}
-	if h264PartitionHeadChecker.IsPartitionHead(stapaNalu) == false {
+	if h264.IsPartitionHead(stapaNalu) == false {
 		t.Fatal("stapa nalu must be a partition head")
 	}
 
 	fuaStartNalu := []byte{fuaNALUType, fuStartBitmask}
-	if h264PartitionHeadChecker.IsPartitionHead(fuaStartNalu) == false {
+	if h264.IsPartitionHead(fuaStartNalu) == false {
 		t.Fatal("fua start nalu must be a partition head")
 	}
 
 	fuaEndNalu := []byte{fuaNALUType, fuEndBitmask}
-	if h264PartitionHeadChecker.IsPartitionHead(fuaEndNalu) {
+	if h264.IsPartitionHead(fuaEndNalu) {
 		t.Fatal("fua end nalu must not be a partition head")
 	}
 
 	fubStartNalu := []byte{fubNALUType, fuStartBitmask}
-	if h264PartitionHeadChecker.IsPartitionHead(fubStartNalu) == false {
+	if h264.IsPartitionHead(fubStartNalu) == false {
 		t.Fatal("fub start nalu must be a partition head")
 	}
 
 	fubEndNalu := []byte{fubNALUType, fuEndBitmask}
-	if h264PartitionHeadChecker.IsPartitionHead(fubEndNalu) {
+	if h264.IsPartitionHead(fubEndNalu) {
 		t.Fatal("fub end nalu must not be a partition head")
+	}
+}
+
+func TestH264Payloader_Payload_SPS_and_PPS_handling(t *testing.T) {
+	pck := H264Payloader{}
+	expected := [][]byte{
+		{0x78, 0x00, 0x03, 0x07, 0x00, 0x01, 0x00, 0x03, 0x08, 0x02, 0x03},
+		{0x05, 0x04, 0x05},
+	}
+
+	// When packetizing SPS and PPS are emitted with following NALU
+	res := pck.Payload(1500, []byte{0x07, 0x00, 0x01})
+	if len(res) != 0 {
+		t.Fatal("Generated payload should be empty")
+	}
+
+	res = pck.Payload(1500, []byte{0x08, 0x02, 0x03})
+	if len(res) != 0 {
+		t.Fatal("Generated payload should be empty")
+	}
+
+	if !reflect.DeepEqual(pck.Payload(1500, []byte{0x05, 0x04, 0x05}), expected) {
+		t.Fatal("SPS and PPS aren't packed together")
 	}
 }
